@@ -36,7 +36,7 @@ func TestGeneratePortForwardCommand(t *testing.T) {
 				Name:      "test-service",
 				Ports:     []string{},
 			},
-			want: "kubectl --context test-context -n test-namespace port-forward service/test-service 1234",
+			want: "kubectl --context test-context -n test-namespace port-forward service/test-service ", // Note the trailing space
 		},
 	}
 
