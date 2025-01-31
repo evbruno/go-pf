@@ -28,6 +28,16 @@ func TestGeneratePortForwardCommand(t *testing.T) {
 			},
 			want: "kubectl --context test-context -n test-namespace port-forward service/test-service 8080 3000",
 		},
+		{
+			name: "No Ports",
+			svc: K8SService{
+				Context:   "test-context",
+				Namespace: "test-namespace",
+				Name:      "test-service",
+				Ports:     []string{},
+			},
+			want: "kubectl --context test-context -n test-namespace port-forward service/test-service ", // Note the trailing space
+		},
 	}
 
 	for _, tt := range tests {
