@@ -1,6 +1,7 @@
 # go-pf
 
 ![build](https://github.com/evbruno/go-pf/actions/workflows/build.yml/badge.svg)
+[![Build and Release](https://github.com/evbruno/go-pf/actions/workflows/release.yml/badge.svg)](https://github.com/evbruno/go-pf/actions/workflows/release.yml)
 
 ![go-pf logo|500](./go-pf.jpeg)
 
