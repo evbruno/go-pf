@@ -8,7 +8,6 @@ func TestGeneratePortForwardCommand(t *testing.T) {
 		svc  K8SService
 		want string
 	}{
-		// TODO: Add test cases.
 		{
 			name: "Single Port",
 			svc: K8SService{
@@ -18,6 +17,16 @@ func TestGeneratePortForwardCommand(t *testing.T) {
 				Ports:     []string{"8080"},
 			},
 			want: "kubectl --context test-context -n test-namespace port-forward service/test-service 8080",
+		},
+		{
+			name: "Multiple Ports",
+			svc: K8SService{
+				Context:   "test-context",
+				Namespace: "test-namespace",
+				Name:      "test-service",
+				Ports:     []string{"8080", "3000"},
+			},
+			want: "kubectl --context test-context -n test-namespace port-forward service/test-service 8080 3000",
 		},
 	}
 
