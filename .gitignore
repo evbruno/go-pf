@@ -1,3 +1,4 @@
 # ignore local bins
 k8s
 go-pf
+dist/
