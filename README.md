@@ -1,5 +1,7 @@
 # go-pf
 
+![build](https://github.com/evbruno/go-pf/actions/workflows/build.yml/badge.svg)
+
 ![go-pf logo|500](./go-pf.jpeg)
 
 A simple command-line tool to find duplicated port usage across Kubernetes services within a specified namespace and context, and generate `kubectl port-forward` commands.
