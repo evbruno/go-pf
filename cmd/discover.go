@@ -4,11 +4,20 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/evbruno/go-pf/lib"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+var (
+	quiet       bool
+	save        bool
+	profileName string
 )
 
 // discoverCmd represents the discover command
@@ -19,26 +28,33 @@ var discoverCmd = &cobra.Command{
 
 It will report if any ports are duplicated.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		ns := cmd.Flag("namespace").Value.String()
-		ctx := cmd.Flag("context").Value.String()
-		q := cmd.Flag("quiet").Value.String() == "true"
-		cfg := cmd.Flag("config").Value.String()
+		ctx := viper.GetString("context")
+		ns := viper.GetString("namespace")
 
-		fmt.Println("Context:", ctx)
-		fmt.Println("Namespace:", ns)
-		fmt.Println("Quiet:", q)
-		fmt.Println("Config:", cfg)
+		quiet = cmd.Flag("quiet").Value.String() == "true"
+		save = cmd.Flag("save").Value.String() == "true"
+		profileName = cmd.Flag("name").Value.String()
 
-		runDiscover(ctx, ns, q)
+		fmt.Println("Discovering services")
+		fmt.Println("Context      :", ctx)
+		fmt.Println("Namespace    :", ns)
+		fmt.Println("Quiet        :", quiet)
+		fmt.Println("Save         :", save)
+		fmt.Println("ProfileName  :", profileName)
+		fmt.Println()
+
+		runDiscover(ctx, ns)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(discoverCmd)
-	discoverCmd.Flags().BoolP("quiet", "q", false, "When quietly, only errors are reported but exit status is always 0")
+	discoverCmd.Flags().BoolP("quiet", "q", false, "When quietly, only errors are reported but exit status is always 0 (also allows to save this profile)")
+	discoverCmd.Flags().BoolP("save", "s", false, "Save the current discovered service to profile")
+	discoverCmd.Flags().StringP("name", "", "", "If present, will save the profile with the given name")
 }
 
-func runDiscover(ctx string, ns string, quiet bool) {
+func runDiscover(ctx string, ns string) {
 	svcs, err := lib.GetKubectlServices(ctx, ns)
 	if err != nil {
 		panic(err)
@@ -59,6 +75,61 @@ func runDiscover(ctx string, ns string, quiet bool) {
 		if !quiet {
 			os.Exit(1)
 		}
+	}
+
+	if save {
+		if len(svcs) == 0 {
+			fmt.Println("No services found. Skipping profile creation.")
+			return
+		}
+
+		cfgSvcs := []CfgService{}
+		for _, svc := range svcs {
+			ports := []int{}
+			for _, port := range svc.Ports {
+				portI, err := strconv.Atoi(port)
+				if err != nil {
+					fmt.Println("Skipping port ", port, err)
+				} else {
+					ports = append(ports, portI)
+				}
+			}
+
+			cfgSvcs = append(cfgSvcs, CfgService{
+				Name:      svc.Name,
+				Context:   svc.Context,
+				Namespace: svc.Namespace,
+				Ports:     ports,
+			})
+		}
+
+		newName := profileName
+		if newName == "" {
+			r := uint64(time.Now().UnixNano())
+			newName = fmt.Sprintf("new-profile-%d", r)
+		}
+
+		fmt.Println("---")
+		fmt.Println("Creating profile")
+		fmt.Println(newName)
+		fmt.Println(len(cfgSvcs), "new services")
+		fmt.Println("---")
+
+		newProfile := &CfgProfile{
+			DefaultProfile: newName,
+			Profiles: []CfgProfileItem{
+				{
+					Name:      newName,
+					Namespace: ns,
+					Context:   ctx,
+					Services:  cfgSvcs,
+				},
+			},
+		}
+
+		updatedProfile := MergeProfile(newProfile)
+
+		WriteProfile(&updatedProfile)
 	}
 
 }

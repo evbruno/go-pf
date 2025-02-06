@@ -6,12 +6,34 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
 )
+
+type CfgService struct {
+	Name      string `yaml:"name" mapstructure:"name"`
+	Ports     []int  `yaml:"ports" mapstructure:"ports"`
+	Context   string `yaml:"context,omitempty" mapstructure:"context"`
+	Namespace string `yaml:"namespace,omitempty" mapstructure:"namespace"`
+}
+
+type CfgProfileItem struct {
+	Name      string       `yaml:"name" mapstructure:"name"`
+	Context   string       `yaml:"context,omitempty" mapstructure:"context"`
+	Namespace string       `yaml:"namespace,omitempty" mapstructure:"namespace"`
+	Services  []CfgService `yaml:"services" mapstructure:"services"`
+}
+
+type CfgProfile struct {
+	Context        string           `yaml:"context,omitempty" mapstructure:"context"`
+	Namespace      string           `yaml:"namespace,omitempty" mapstructure:"namespace"`
+	DefaultProfile string           `yaml:"default-profile,omitempty" mapstructure:"default-profile"`
+	Profiles       []CfgProfileItem `yaml:"profiles" mapstructure:"profiles"`
+}
 
 // profilesCmd represents the profiles command
 var profilesCmd = &cobra.Command{
@@ -29,12 +51,33 @@ to quickly create a Cobra application.`,
 
 		runProfiles(cmd, isInit, overwrite)
 	},
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 {
+			//cmd.Help()
+			//os.Exit(1)
+			return fmt.Errorf("unknown sub-command %s", args[0])
+		}
+
+		return nil
+	},
+}
+
+var profilesRunCmd = &cobra.Command{
+	Use:   "run",
+	Short: "Run a profile",
+	Run: func(cmd *cobra.Command, args []string) {
+		profile := cmd.Flag("profile").Value.String()
+		runProfile(profile)
+	},
 }
 
 func init() {
 	rootCmd.AddCommand(profilesCmd)
 	profilesCmd.Flags().BoolP("init", "i", false, "If enabled, will create a default configuration file")
 	profilesCmd.Flags().BoolP("overwrite", "o", false, "If enabled, will overwrite any existing configuration file")
+
+	profilesCmd.AddCommand(profilesRunCmd)
+	profilesRunCmd.Flags().StringP("profile", "p", "", "It will run A profile, it will default to the global 'default-profile' configuration")
 
 	// Here you will define your flags and configuration settings.
 
@@ -47,28 +90,37 @@ func init() {
 	// profilesCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-type CfgService struct {
-	Name    string `yaml:"name" mapstructure:"name"`
-	Ports   []int  `yaml:"ports" mapstructure:"ports"`
-	Context string `yaml:"context,omitempty" mapstructure:"context"`
-}
+func runProfile(targetProfile string) {
+	fmt.Println("Running `profiles run` targetProfile [", targetProfile, "]")
 
-type CfgProfileItem struct {
-	Name      string       `yaml:"name" mapstructure:"name"`
-	Context   string       `yaml:"context,omitempty" mapstructure:"context"`
-	Namespace string       `yaml:"namespace,omitempty" mapstructure:"namespace"`
-	Services  []CfgService `yaml:"services" mapstructure:"services"`
-}
+	profile, err := LoadProfile()
+	if err != nil {
+		log.Fatalf("unable to read config from file: %v", err)
+	}
 
-type CfgProfile struct {
-	Context   string           `yaml:"context,omitempty" mapstructure:"context"`
-	Namespace string           `yaml:"namespace,omitempty" mapstructure:"namespace"`
-	Profiles  []CfgProfileItem `yaml:"profiles" mapstructure:"profiles"`
+	if targetProfile == "" {
+		targetProfile = profile.DefaultProfile
+	}
+
+	if targetProfile == "" {
+		log.Fatalf("no default profile found")
+	}
+
+	foundIdx := slices.IndexFunc(profile.Profiles, func(i CfgProfileItem) bool {
+		fmt.Println("Comparing", i.Name, targetProfile)
+		return i.Name == targetProfile
+	})
+
+	if foundIdx < 0 {
+		log.Fatalf("profile %s not found [%d]", targetProfile, foundIdx)
+	}
+
+	printProfileItem(profile.Profiles[foundIdx])
 }
 
 func runProfiles(cmd *cobra.Command, isInit bool, overwrite bool) {
 	file := viper.ConfigFileUsed()
-	fmt.Println("profiles called isInit", isInit, file, overwrite)
+	fmt.Println("Running `profiles` init? [", isInit, "] overwrite [", overwrite, "file [", file, "]")
 
 	if isInit && overwrite {
 		initConfigProfile(cmd)
@@ -93,9 +145,9 @@ func runProfiles(cmd *cobra.Command, isInit bool, overwrite bool) {
 	}
 }
 
-func initConfigProfile(cmd *cobra.Command) {
-	ns := cmd.Flag("namespace").Value.String()
-	ctx := cmd.Flag("context").Value.String()
+func initConfigProfile(_ *cobra.Command) {
+	ctx := viper.GetString("context")
+	ns := viper.GetString("namespace")
 
 	fmt.Println("Creating default configuration file ns ", ns, " ctx ", ctx)
 	WriteProfile(&CfgProfile{
@@ -120,18 +172,54 @@ func initConfigProfile(cmd *cobra.Command) {
 	})
 }
 
+// keep Global namespace and context
+func MergeProfile(newProfile *CfgProfile) CfgProfile {
+	currentProfile, err := LoadProfile()
+	if err != nil {
+		log.Fatalf("unable to read config from file: %v", err)
+	}
+
+	if currentProfile.Context == "" {
+		currentProfile.Context = newProfile.Context
+	}
+
+	if currentProfile.Namespace == "" {
+		currentProfile.Namespace = newProfile.Namespace
+	}
+
+	if currentProfile.DefaultProfile == "" {
+		currentProfile.DefaultProfile = newProfile.DefaultProfile
+	}
+
+	// FIXME this is going to override existing profiles (names)
+	allProfiles := append(currentProfile.Profiles, newProfile.Profiles...)
+
+	return CfgProfile{
+		Context:        currentProfile.Context,
+		Namespace:      currentProfile.Namespace,
+		DefaultProfile: currentProfile.DefaultProfile,
+		Profiles:       allProfiles,
+	}
+
+}
+
 func WriteProfile(p *CfgProfile) {
 	bs, err := yaml.Marshal(p)
 	if err != nil {
 		log.Fatalf("unable to marshal config to YAML: %v", err)
 	}
-
 	contents := string(bs)
 	fmt.Println("Writing config to", viper.ConfigFileUsed())
 	fmt.Println(contents)
 
-	viper.ReadConfig(strings.NewReader(contents))
-	viper.WriteConfig()
+	if err := viper.ReadConfig(strings.NewReader(contents)); err != nil {
+		log.Fatalf("unable to read config to file: %v", err)
+	}
+
+	if err := viper.WriteConfig(); err != nil {
+		log.Fatalf("unable to merge config to file: %v", err)
+	}
+
 }
 
 func LoadProfile() (CfgProfile, error) {
@@ -145,38 +233,28 @@ func LoadProfile() (CfgProfile, error) {
 	}
 
 	return profile, nil
-
-	// fmt.Println("Loading profiles")
-	// var profiles []Profile
-	// // Unmarshal the "profiles" key from the YAML into a slice of Profile structs.
-	// if err := viper.UnmarshalKey("profiles", &profiles); err != nil {
-	// 	fmt.Printf("Error parsing profiles: %v\n", err)
-	// 	return CfgProfile{}, nil
-	// }
-
-	// return CfgProfile{
-	// 	Namespace: viper.GetString("namespace"),
-	// 	Context:   viper.GetString("context"),
-	// 	Profiles:  profiles,
-	// }, nil
 }
 
 func printProfiles(cfg CfgProfile) {
 	fmt.Printf("Context: %s\n", cfg.Context)
 	fmt.Printf("Namespace: %s\n", cfg.Namespace)
 
-	// Iterate over each profile and print its details.
 	for _, p := range cfg.Profiles {
-		fmt.Printf("Profile: %s\n", p.Name)
-		fmt.Printf("  Context: %s, Namespace: %s\n", p.Context, p.Namespace)
-		fmt.Println("  Services:")
-		for _, s := range p.Services {
-			fmt.Printf("    - Name: %s, Ports: %v", s.Name, s.Ports)
-			if s.Context != "" {
-				fmt.Printf(", Context: %s", s.Context)
-			}
-			fmt.Println()
+		printProfileItem(p)
+	}
+}
+
+func printProfileItem(item CfgProfileItem) {
+	fmt.Printf("Profile: %s\n", item.Name)
+	fmt.Printf("  Context: %s, Namespace: %s\n", item.Context, item.Namespace)
+	fmt.Println("  Services:")
+	for _, s := range item.Services {
+		fmt.Printf("    - Name: %s, Ports: %v", s.Name, s.Ports)
+		if s.Context != "" {
+			fmt.Printf(", Context: %s", s.Context)
 		}
 		fmt.Println()
 	}
+	fmt.Println()
+
 }

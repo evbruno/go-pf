@@ -1,16 +1,20 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/evbruno/go-pf/lib"
+)
 
 func TestGeneratePortForwardCommand(t *testing.T) {
 	tests := []struct {
 		name string
-		svc  K8SService
+		svc  lib.K8SService
 		want string
 	}{
 		{
 			name: "Single Port",
-			svc: K8SService{
+			svc: lib.K8SService{
 				Context:   "test-context",
 				Namespace: "test-namespace",
 				Name:      "test-service",
@@ -20,7 +24,7 @@ func TestGeneratePortForwardCommand(t *testing.T) {
 		},
 		{
 			name: "Multiple Ports",
-			svc: K8SService{
+			svc: lib.K8SService{
 				Context:   "test-context",
 				Namespace: "test-namespace",
 				Name:      "test-service",
@@ -30,7 +34,7 @@ func TestGeneratePortForwardCommand(t *testing.T) {
 		},
 		{
 			name: "No Ports",
-			svc: K8SService{
+			svc: lib.K8SService{
 				Context:   "test-context",
 				Namespace: "test-namespace",
 				Name:      "test-service",
@@ -42,7 +46,7 @@ func TestGeneratePortForwardCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := GeneratePortForwardCommand(tt.svc); got != tt.want {
+			if got := lib.GeneratePortForwardCommand(tt.svc); got != tt.want {
 				t.Errorf("GeneratePortForwardCommand() = %v, want %v", got, tt.want)
 			}
 		})

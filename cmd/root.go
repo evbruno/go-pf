@@ -51,11 +51,13 @@ func init() {
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
+	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
+
 	rootCmd.PersistentFlags().StringP("context", "c", "", "Kubernetes Config Context")
+	viper.BindPFlag("context", rootCmd.PersistentFlags().Lookup("context"))
 
 	rootCmd.PersistentFlags().StringP("namespace", "n", "default", "Kubernetes Namespace")
 	viper.BindPFlag("namespace", rootCmd.PersistentFlags().Lookup("namespace"))
-
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -79,19 +81,9 @@ func initConfig() {
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
-
-		//overrideRootFlag("context", "")
-		overrideRootFlag("namespace", "default")
-	}
-}
-
-func overrideRootFlag(flagName string, defaultFlagValue string) {
-	if rootCmd.Flag(flagName).Value.String() != defaultFlagValue {
-		return
-	}
-
-	newValue := viper.GetString(flagName)
-	if newValue != "" {
-		rootCmd.Flags().Set(flagName, newValue)
+		fmt.Fprintln(os.Stderr, "Profile.Context:", viper.GetString("context"))
+		fmt.Fprintln(os.Stderr, "Profile.Namespace:", viper.GetString("namespace"))
+		fmt.Fprintln(os.Stderr, "Profile.Default:", viper.GetString("default-profile"))
+		fmt.Println()
 	}
 }
