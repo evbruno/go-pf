@@ -1,19 +1,35 @@
-package main
+package lib
 
 import (
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 )
 
 var shell = []string{"bash", "-c"}
 
+/*
+🙂'😀'
+slightly smiling face
+Unicode: U+1F642, UTF-8: F0 9F 99 82
+*/
 const (
+	nok         = "💣"
+	ok          = "😀"
 	getContexts = "kubectl config get-contexts --output=name"
 	getNS       = "kubectl %s get ns --no-headers -o custom-columns=:metadata.name"
 	getSVC      = "kubectl %s get svc --no-headers -o custom-columns=:metadata.name,:spec.ports[*].port"
 )
+
+func OkIcon(eval bool) string {
+	if eval {
+		return ok
+	}
+
+	return nok
+}
 
 type K8SService struct {
 	Context   string
@@ -34,7 +50,7 @@ func GetKubectlNamespaces(ctx string) ([]string, error) {
 	return runKubectlCommand(fmt.Sprintf(getNS, ctxArg))
 }
 
-func getKubectlServices(context, namespace string) ([]K8SService, error) {
+func GetKubectlServices(context, namespace string) ([]K8SService, error) {
 	extraArgs := ""
 
 	if context != "" {
@@ -95,4 +111,24 @@ func splitLines(s string) []string {
 
 func GeneratePortForwardCommand(svc K8SService) string {
 	return fmt.Sprintf("kubectl --context %s -n %s port-forward service/%s %s", svc.Context, svc.Namespace, svc.Name, strings.Join(svc.Ports, " "))
+}
+
+func NewCommand(svc K8SService) *exec.Cmd {
+	c := append(shell, GeneratePortForwardCommand(svc))
+	cmd := exec.Command(c[0], c[1:]...)
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // Run in separate process group
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd
+}
+
+func (svc K8SService) NewCommand2() *exec.Cmd {
+	c := append(shell, GeneratePortForwardCommand(svc))
+	cmd := exec.Command(c[0], c[1:]...)
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // Run in separate process group
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd
 }
